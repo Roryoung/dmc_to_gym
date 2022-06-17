@@ -1,9 +1,9 @@
-import sys
+# import sys
 
-from .wrappers import DMCWrapper
+# from .wrappers import DMCWrapper
 
-class mod_call:
-    def __call__(self, env, **kwargs):
-        return DMCWrapper(env, **kwargs)
+# class mod_call:
+#     def __call__(self, env, **kwargs):
+#         return DMCWrapper(env, **kwargs)
 
-sys.modules[__name__] = mod_call()
+# sys.modules[__name__] = mod_call()

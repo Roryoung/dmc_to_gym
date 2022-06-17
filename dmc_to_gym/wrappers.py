@@ -3,17 +3,17 @@ from dm_env import specs
 import numpy as np
 
 
-def _spec_to_box(spec):
+def _spec_to_box(spec, dtype=np.float64):
     shape = spec.shape
     if type(spec) == specs.Array:
-        high = np.inf * np.ones(shape, dtype=np.float64)
+        high = np.inf * np.ones(shape, dtype=dtype)
         low = - high    
 
     elif type(spec) == specs.BoundedArray:
-        high = spec.maximum
-        low = spec.minimum
+        high = spec.maximum.astype(dtype)
+        low = spec.minimum.astype(dtype)
 
-    return spaces.Box(low, high, shape=shape, dtype=np.float64)
+    return spaces.Box(low, high, shape=shape, dtype=dtype)
 
 
 def _flatten_obs(obs):
@@ -44,24 +44,28 @@ class DMCWrapper(core.Env):
         self._render_camera_id = camera_id
         self._frame_skip = frame_skip
         self._channels_first = channels_first
-        self.constraints = dmc_env.task.constraints or []
+        self.constraints = dmc_env.task.constraints if hasattr(dmc_env.task, "constraints") else []
+        # self.constraints = dmc_env.task.constraints or []
         self.metadata["render.modes"].append("rgb_array")
         self.render_reward = False
         self.render_constraints = False
 
         # create action
-        self._action_space = _spec_to_box(self.dmc_env.action_spec())
+        self._action_space = _spec_to_box(self.dmc_env.action_spec(), dtype=np.float32)
 
         # create observation space
         if from_pixels:
             shape = [3, height, width] if channels_first else [height, width, 3]
             self._observation_space = spaces.Box(low=0, high=255, shape=shape, dtype=np.uint8)
         else:
-            self._observation_space = _spec_to_box(self.dmc_env.observation_spec())
-            
-        self._state_space = _spec_to_box(self.dmc_env.observation_spec())
+            # print(self.dmc_env.observation_spec())
+            # raise
+            self._observation_space = _spec_to_box(self.dmc_env.observation_spec()["observations"])
+        
+        self._state_space = _spec_to_box(self.dmc_env.observation_spec()["observations"])
         
         self.current_state = None
+        # self.current_time_step = self.dmc_env.reset()
 
         # set seed
         if seed is not None:
@@ -84,7 +88,7 @@ class DMCWrapper(core.Env):
                 obs = obs.transpose(2, 0, 1).copy()
 
         else:
-            obs = _flatten_obs(time_step.observation)
+            obs = _flatten_obs(time_step.observation["observations"])
         return obs
 
     @property
@@ -123,7 +127,7 @@ class DMCWrapper(core.Env):
                 break
         
         obs = self._get_obs(time_step)
-        self.current_state = _flatten_obs(time_step.observation)
+        self.current_state = _flatten_obs(time_step.observation["observations"])
         self.current_time_step = time_step
         # self._set_reward_colors(reward, time_step.observation[-len(self.constraints):])
         extra["discount"] = time_step.discount
@@ -132,9 +136,17 @@ class DMCWrapper(core.Env):
 
     def reset(self):
         time_step = self.dmc_env.reset()
-        self.current_state = _flatten_obs(time_step.observation)
+        self.current_state = _flatten_obs(time_step.observation["observations"])
         obs = self._get_obs(time_step)
         return obs
+
+
+    def set_state(self, state, obs=True):
+        return self.dmc_env.set_state(state, obs)
+        
+
+    def get_dmc_env(self):
+        return self.dmc_env
 
 
     def render(self, render_colors=True, mode="rgb_array", height=None, width=None, camera_ids=None):
@@ -146,13 +158,13 @@ class DMCWrapper(core.Env):
         if not render_colors:
             self._set_reward_colors(0, [])
         else:
-            self._set_reward_colors(self.current_time_step.reward, self.current_time_step.observation[-len(self.constraints):])
+            self._set_reward_colors(self.current_time_step.reward or 0, self.current_time_step.observation["observations"][-len(self.constraints):])
 
         images = [
             self.dmc_env.physics.render(height=height, width=width, camera_id=camera_id) for camera_id in camera_ids
         ]
 
-        images = np.concatenate(images, axis=1)
+        images = np.concatenate(images, axis=0)
 
         return images
 
