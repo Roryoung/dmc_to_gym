@@ -1,6 +1,7 @@
 from gym import core, spaces
 from dm_env import specs
 import numpy as np
+from dm_control.rl.control import flatten_observation
 
 
 def _spec_to_box(spec, dtype=np.float64):
@@ -142,7 +143,21 @@ class DMCWrapper(core.Env):
 
 
     def set_state(self, state, obs=True):
-        return self.dmc_env.set_state(state, obs)
+        self.dmc_env._physics.set_state(state)
+
+        with self.dmc_env._physics.model.disable('actuation'):
+            self.dmc_env._physics.forward()
+
+        obs = self.dmc_env._task.get_observation(self.dmc_env._physics)
+        if self.dmc_env._flat_observation:
+            obs = flatten_observation(obs)
+            obs = _flatten_obs(obs["observations"])
+
+        return obs
+
+    
+    def get_state(self):
+        return self.dmc_env._physics.get_state()
         
 
     def get_dmc_env(self):
