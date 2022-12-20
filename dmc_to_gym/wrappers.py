@@ -1,3 +1,5 @@
+import copy
+
 from gym import core, spaces
 from dm_env import specs
 import numpy as np
@@ -66,6 +68,8 @@ class DMCWrapper(core.Env):
         self._state_space = _spec_to_box(self.dmc_env.observation_spec()["observations"])
         
         self.current_state = None
+        self.ep_reward = 0
+        self.ep_len = 0
         # self.current_time_step = self.dmc_env.reset()
 
         # set seed
@@ -117,7 +121,8 @@ class DMCWrapper(core.Env):
         action = np.array(action)
         assert self._action_space.contains(action)
         reward = 0
-        extra = {"internal_state": self.dmc_env.physics.get_state().copy()}
+        # extra = {"internal_state": self.dmc_env.physics.get_state().copy()}
+        info = {}
 
         for _ in range(self._frame_skip):
             time_step = self.dmc_env.step(action)
@@ -130,15 +135,29 @@ class DMCWrapper(core.Env):
         obs = self._get_obs(time_step)
         self.current_state = _flatten_obs(time_step.observation["observations"])
         self.current_time_step = time_step
+        self.ep_reward += reward
+        self.ep_len += 1
         # self._set_reward_colors(reward, time_step.observation[-len(self.constraints):])
-        extra["discount"] = time_step.discount
-        return obs, reward, done, extra
+        info["discount"] = time_step.discount
+        info["is_success"] = done
+        if done == True:
+            info["episode"] = {
+                "r": self.ep_reward,
+                "l": self.ep_len,
+            }
+
+            self.ep_reward = 0
+            self.ep_len = 0
+
+        return obs, reward, done, info
 
 
     def reset(self):
         time_step = self.dmc_env.reset()
         self.current_state = _flatten_obs(time_step.observation["observations"])
         obs = self._get_obs(time_step)
+        self.ep_reward = 0
+        self.ep_len = 0
         return obs
 
 
@@ -158,6 +177,14 @@ class DMCWrapper(core.Env):
     
     def get_state(self):
         return self.dmc_env._physics.get_state()
+
+    
+    def set_task(self, task):
+        self.dmc_env._task = copy.deepcopy(task)
+
+
+    def get_task(self):
+        return copy.deepcopy(self.dmc_env._task)
         
 
     def get_dmc_env(self):
