@@ -6,9 +6,10 @@ import numpy as np
 from dm_control.rl.control import flatten_observation
 
 
+
 def _spec_to_box(spec, dtype=np.float64):
     shape = spec.shape
-    if type(spec) == specs.Array:
+    if type(spec) == specs.Array or isinstance(spec, np.ndarray):
         high = np.inf * np.ones(shape, dtype=dtype)
         low = - high    
 
@@ -61,10 +62,10 @@ class DMCWrapper(core.Env):
             shape = [3, height, width] if channels_first else [height, width, 3]
             self._observation_space = spaces.Box(low=0, high=255, shape=shape, dtype=np.uint8)
         else:
-            # print(self.dmc_env.observation_spec())
-            # raise
+            # self._observation_space = _spec_to_box(self.get_state())
             self._observation_space = _spec_to_box(self.dmc_env.observation_spec()["observations"])
         
+        # self._state_space = _spec_to_box(self.get_state())
         self._state_space = _spec_to_box(self.dmc_env.observation_spec()["observations"])
         
         self.current_state = None
@@ -94,6 +95,7 @@ class DMCWrapper(core.Env):
 
         else:
             obs = _flatten_obs(time_step.observation["observations"])
+            # obs = self.dmc_env._physics.get_state()
         return obs
 
     @property
@@ -119,7 +121,7 @@ class DMCWrapper(core.Env):
 
     def step(self, action, render=False):
         action = np.array(action)
-        assert self._action_space.contains(action)
+        # assert self._action_space.contains(action)
         reward = 0
         # extra = {"internal_state": self.dmc_env.physics.get_state().copy()}
         info = {}
@@ -172,6 +174,7 @@ class DMCWrapper(core.Env):
             obs = flatten_observation(obs)
             obs = _flatten_obs(obs["observations"])
 
+        # return self.get_state()
         return obs
 
     
@@ -192,7 +195,9 @@ class DMCWrapper(core.Env):
 
 
     def render(self, render_colors=True, mode="rgb_array", height=None, width=None, camera_ids=None):
-        assert mode == "rgb_array", "only support rgb_array mode, given %s" % mode
+        import os
+        os.environ['MUJOCO_GL'] = 'glfw'
+        # assert mode == "rgb_array", "only support rgb_array mode, given %s" % mode
         height = height or self._height
         width = width or self._width
         camera_ids = camera_ids or self._render_camera_id or self._camera_id
